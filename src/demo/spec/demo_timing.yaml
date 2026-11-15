@@ -1,0 +1,47 @@
+# timing: wave: p n (такт) 0 1 (уровни) = (шина, подписи из data) x (неопр.) z (Hi-Z) . (продолжение)
+# arrows: from/to = [сигнал, тик]; тик может быть дробным (1.5 = середина такта)
+kind: timing
+name: spi_mode0
+title: "SPI, режим 0: обмен одного байта"
+ticks: ["idle", "b7", "b6", "b5", "b4", "b3", "b2", "b1", "b0", "end"]
+signals:
+  - {name: SCK,  wave: "0p.......0"}
+  - {name: CS_N, wave: "10.......1"}
+  - {name: MOSI, wave: "x========x", data: ["1", "0", "1", "1", "0", "0", "1", "0"]}
+  - {name: MISO, wave: "z========z", data: ["0", "1", "1", "0", "1", "0", "0", "1"]}
+arrows:
+  - {from: [CS_N, 1],  to: [SCK, 1],   text: "t_CSS"}
+  - {from: [MOSI, 1],  to: [SCK, 1.5], text: "t_su"}
+  - {from: [SCK, 8.5], to: [CS_N, 9],  text: "t_CSH"}
+---
+kind: timing
+name: wb_read
+title: "Wishbone: чтение с одним состоянием ожидания"
+subtitle: "Классический цикл B3, ведущий читает слово по адресу A"
+ticks: ["T0", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"]
+signals:
+  - {name: CLK,   wave: "p........"}
+  - {name: CYC,   wave: "01...0..."}
+  - {name: STB,   wave: "01...0..."}
+  - {name: WE,    wave: "0........"}
+  - {name: ADR,   wave: "x=...x...", data: ["A"]}
+  - {name: ACK,   wave: "0...10..."}
+  - {name: DAT_I, wave: "x...=x...", data: ["D"]}
+arrows:
+  - {from: [STB, 1],   to: [ACK, 4],     text: "ожидание"}
+  - {from: [ACK, 4.5], to: [DAT_I, 4.5], text: "данные верны"}
+  - {from: [ACK, 5],   to: [CYC, 5],     text: "конец цикла"}
+---
+kind: timing
+name: sram_write
+title: "Запись в асинхронную SRAM: setup и hold"
+tick_width: 78
+signals:
+  - {name: CS_N, wave: "10....1."}
+  - {name: WE_N, wave: "1.0..1.."}
+  - {name: ADDR, wave: "x=....x.", data: ["A"]}
+  - {name: DQ,   wave: "zz=..zzz", data: ["Din"]}
+arrows:
+  - {from: [ADDR, 1], to: [WE_N, 2], text: "t_AS"}
+  - {from: [DQ, 2],   to: [WE_N, 4], text: "t_DW"}
+  - {from: [WE_N, 5], to: [DQ, 5],   text: "t_DH"}

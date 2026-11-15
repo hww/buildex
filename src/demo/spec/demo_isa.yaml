@@ -1,0 +1,85 @@
+# enum с разными radix, диапазонами и произвольными колонками
+kind: enum
+name: alu_ops
+title: "Операции АЛУ (OP, 4 бита)"
+width: 4
+radix: hex
+entries:
+  - {value: 0x0, name: MOV, description: "d = s",          flags: "Z N"}
+  - {value: 0x1, name: AND, description: "d = d & s",      flags: "Z N"}
+  - {value: 0x2, name: OR,  description: "d = d | s",      flags: "Z N"}
+  - {value: 0x3, name: XOR, description: "d = d ^ s",      flags: "Z N"}
+  - {value: 0x4, name: ADD, description: "d = d + s",      flags: "Z N C V"}
+  - {value: 0x5, name: SUB, description: "d = d - s",      flags: "Z N C V"}
+  - {value: 0x6, name: CMP, description: "SUB без записи", flags: "Z N C V"}
+  - {value: "0x7..0xF", name: reserved, description: "—", flags: "—"}
+notes:
+  - "Запись в регистр ZERO отбрасывается."
+  - "Флаги обновляются только при F=1 (CMP — всегда)."
+---
+kind: enum
+name: conds
+title: "Условия (COND, 2 бита)"
+width: 2
+radix: bin
+entries:
+  - {value: 0, name: AL, description: "Всегда"}
+  - {value: 1, name: EQ, description: "Z = 1"}
+  - {value: 2, name: NE, description: "Z = 0"}
+  - {value: 3, name: CS, description: "C = 1"}
+---
+kind: enum
+name: ctrl_ops
+title: "Управляющие операции"
+width: 4
+columns:                       # свои колонки и заголовки
+  - {key: value, title: "Код"}
+  - name
+  - {key: description, title: "Действие"}
+entries:
+  - {value: 0, name: NOP,  description: "Ничего"}
+  - {value: 1, name: JMP,  description: "PC = ADDR"}
+  - {value: 2, name: CALL, description: "SHADOW = PC+1; PC = ADDR"}
+  - {value: 3, name: RET,  description: "PC = SHADOW"}
+  - {value: 4, name: JMPR, description: "PC = регистр REG"}
+---
+# encoding: общие поля + варианты по селектору (when).
+kind: encoding
+name: insn
+title: "Формат команды · 24 бита"
+description: "Три формата, выбираются полями J и I."
+width: 24
+common:
+  - {name: L,   bit: 23,       description: "Флаг цикла"}
+  - {name: J,   bit: 22,       description: "Селектор формата, старший"}
+  - {name: I,   bit: 21,       description: "Селектор формата, младший"}
+  - {name: DST, bits: [20,16], description: "Приёмник (R0..R31)"}
+variants:
+  - name: reg
+    title: "REG-REG"
+    when: {J: 0, I: 0}
+    description: "d = d op s"
+    fields:
+      - {name: COND, bits: [15,14], enum: conds,   description: "Условие"}
+      - {name: F,    bit: 13,                       description: "Обновить флаги"}
+      - {name: OP,   bits: [12,9],  enum: alu_ops,  description: "Операция АЛУ"}
+      - {name: SRC,  bits: [8,3],                   description: "Источник {S, n[4:0]}"}
+      - {name: RSV,  bits: [2,0],   reserved: true}
+  - name: imm
+    title: "REG-IMM"
+    when: {J: 1, I: 1}
+    description: "d = d op imm"
+    fields:
+      - {name: COND, bits: [15,14], enum: conds}
+      - {name: F,    bit: 13}
+      - {name: OP,   bits: [12,9],  enum: alu_ops}
+      - {name: IMM,  bits: [8,0],   description: "9-битная константа"}
+  - name: ctrl
+    title: "CONTROL"
+    when: {J: 1, I: 0}
+    fields:
+      - {name: DST,  bits: [20,16], description: "Не используется"}
+      - {name: COND, bits: [15,14], enum: conds}
+      - {name: OP,   bits: [13,10], enum: ctrl_ops}
+      - {name: ADDR, bits: [9,0],   description: "Адрес перехода"}
+      - {name: REG,  bits: [9,4],   overlay: true, description: "Для JMPR: регистр (перекрывает ADDR)"}

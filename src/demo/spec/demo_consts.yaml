@@ -1,0 +1,8 @@
+# kind: const — именованные константы. В тексте: {{const:CLK_MHZ}}
+kind: const
+name: limits
+title: "Параметры SoC"
+values:
+  - {name: CLK_MHZ,   value: 48,     description: "Системная частота, МГц"}
+  - {name: UART_BAUD, value: 115200, description: "Скорость UART по умолчанию"}
+  - {name: SRAM_KIB,  value: 8,      description: "Объём SRAM, КиБ"}

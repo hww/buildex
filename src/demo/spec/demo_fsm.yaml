@@ -1,0 +1,52 @@
+# fsm: initial, output у состояний, несколько переходов на одной паре, петли, встречные переходы
+kind: fsm
+name: wb_master
+title: "Автомат шинного мастера Wishbone"
+initial: IDLE
+states:
+  - {name: IDLE, output: "cyc=0", description: "Ожидание запроса"}
+  - {name: REQ,  output: "cyc=1 stb=1", description: "Выставлен запрос"}
+  - {name: WAIT, output: "cyc=1", description: "Ожидание ACK"}
+  - {name: DONE, output: "valid=1", description: "Данные приняты"}
+  - {name: ERR,  output: "err=1",  description: "Таймаут шины"}
+transitions:
+  - {from: IDLE, to: REQ,  when: "start",           do: "latch addr"}
+  - {from: IDLE, to: REQ,  when: "retry",           do: "reuse addr"}
+  - {from: IDLE, to: IDLE, when: "!start"}
+  - {from: REQ,  to: WAIT}
+  - {from: WAIT, to: WAIT, when: "!ack & !timeout"}
+  - {from: WAIT, to: DONE, when: "ack",             do: "latch data"}
+  - {from: WAIT, to: ERR,  when: "timeout"}
+  - {from: DONE, to: IDLE}
+  - {from: ERR,  to: IDLE, when: "clear"}
+---
+kind: fsm
+name: uart_rx
+title: "Приёмник UART"
+initial: IDLE
+states:
+  - {name: IDLE}
+  - {name: START}
+  - {name: DATA}
+  - {name: STOP}
+transitions:
+  - {from: IDLE,  to: START, when: "rx == 0"}
+  - {from: START, to: DATA,  when: "mid-bit", do: "cnt = 0"}
+  - {from: START, to: IDLE,  when: "rx == 1", do: "glitch"}
+  - {from: DATA,  to: DATA,  when: "cnt < 7", do: "shift"}
+  - {from: DATA,  to: STOP,  when: "cnt == 7"}
+  - {from: STOP,  to: IDLE,  when: "rx == 1", do: "rxf = 1"}
+---
+kind: fsm
+name: cache_fsm
+title: "Автомат кэша: встречные переходы"
+initial: C_IDLE
+states:
+  - {name: C_IDLE}
+  - {name: C_FILL}
+  - {name: C_WB}
+transitions:
+  - {from: C_IDLE, to: C_FILL, when: "miss"}
+  - {from: C_FILL, to: C_IDLE, when: "ack"}
+  - {from: C_IDLE, to: C_WB,   when: "flush & dirty"}
+  - {from: C_WB,   to: C_IDLE, when: "ack"}

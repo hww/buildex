@@ -1,0 +1,78 @@
+# bitfield: access/reset/enum/reserved/partial
+kind: enum
+name: uart_modes
+title: "Режимы UART"
+width: 2
+entries:
+  - {value: 0, name: "8N1"}
+  - {value: 1, name: "8E1"}
+  - {value: 2, name: "8O1"}
+  - {value: 3, name: "7E1"}
+---
+kind: bitfield
+name: uart_ctrl
+title: "UART_CTRL · 16 бит"
+width: 16
+fields:
+  - {name: EN,   bit: 0,       access: rw,  reset: 0, description: "Включить"}
+  - {name: MODE, bits: [2,1],  access: rw,  reset: 0, enum: uart_modes, description: "Формат кадра"}
+  - {name: IRQE, bit: 3,       access: rw,  reset: 0, description: "Разрешить прерывание"}
+  - {name: TXI,  bit: 4,       access: w1c, reset: 0, description: "Флаг конца передачи"}
+  - {name: RSV,  bits: [7,5],  reserved: true}
+  - {name: DIV,  bits: [15,8], access: rw,  reset: 0x1B, description: "Делитель частоты"}
+---
+# extends + fixed: наследование с фиксацией полей
+kind: bitfield
+name: uart_ctrl_boot
+title: "UART_CTRL при старте (EN=1, MODE=8N1)"
+extends: uart_ctrl
+fixed: {EN: 1, MODE: 0}
+---
+# split: широкое слово в несколько строк
+kind: bitfield
+name: timer64
+title: "TIMER · 64 бита"
+width: 64
+split: 32
+fields:
+  - {name: COUNT_LO, bits: [31,0],  access: ro, description: "Младшее слово"}
+  - {name: COUNT_HI, bits: [63,32], access: ro, description: "Старшее слово"}
+---
+# regmap: смещения + inline-поля + ref на bitfield; view включает диаграмму
+kind: regmap
+name: uart
+title: "Регистры UART"
+width: 16
+view: [diagram, table]
+registers:
+  - {offset: 0x00, name: DATA,   access: rw, description: "Данные", fields: [{name: D, bits: [7,0]}, {name: RSV, bits: [15,8], reserved: true}]}
+  - {offset: 0x04, name: STATUS, access: ro, reset: 0x0001, description: "Статус", fields: [{name: TXE, bit: 0}, {name: RXF, bit: 1}, {name: OVR, bit: 2}, {name: RSV, bits: [15,3], reserved: true}]}
+  - {offset: 0x08, name: CTRL,   access: rw, description: "Управление", ref: uart_ctrl}
+  - {offset: 0x0C, name: BAUD,   access: rw, reset: 0x01B2, description: "Делитель скорости"}
+---
+# memmap: группы, дыры (unmapped), size/end
+kind: memmap
+name: soc_map
+title: "Карта памяти SoC"
+width: 16
+regions:
+  - {name: ROM,     start: 0x0000, size: 0x2000, access: ro, purpose: "Загрузчик", group: memory}
+  - {name: SRAM,    start: 0x4000, size: 0x2000, access: rw, purpose: "Данные и стек", group: memory}
+  - {name: UART,    start: 0xF000, end: 0xF00F,  access: rw, group: io}
+  - {name: TIMER,   start: 0xF010, end: 0xF01F,  access: rw, group: io}
+  - {name: VECTORS, start: 0xFFF0, end: 0xFFFF,  access: ro, purpose: "Векторы прерываний"}
+---
+# pins: направления, шины, active_low, номера выводов, группы
+kind: pins
+name: uart_pins
+title: "Выводы UART-блока"
+symbol: UART
+pins:
+  - {name: CLK,   dir: in,    pin: 1, group: system}
+  - {name: RST_N, dir: in,    pin: 2, group: system, active_low: true, description: "Сброс"}
+  - {name: A,     dir: in,    pin: 3, width: 4, group: bus, description: "Адрес регистра"}
+  - {name: D,     dir: inout, pin: 4, width: 8, group: bus, description: "Шина данных"}
+  - {name: WE,    dir: in,    pin: 5, group: bus, description: "Запись"}
+  - {name: TX,    dir: out,   pin: 6, group: line}
+  - {name: RX,    dir: in,    pin: 7, group: line}
+  - {name: IRQ,   dir: out,   pin: 8, description: "Прерывание"}
