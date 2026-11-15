@@ -29,6 +29,7 @@ import argparse
 import copy
 import difflib
 import filecmp
+import hashlib
 import html
 import math
 import os
@@ -37,12 +38,13 @@ import re
 import shutil
 import sys
 import time
+import urllib.parse
 from pathlib import Path
 from types import SimpleNamespace as NS
 
 import yaml
 
-VERSION = "1.4"
+VERSION = "1.5"
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
 OUT = ROOT / "out"
@@ -133,6 +135,30 @@ def smart_copy(src, dst, produced):
     if dst.exists() and filecmp.cmp(src, dst, shallow=False):
         return
     shutil.copy2(src, dst)
+
+
+def _hash(p):
+    h = hashlib.md5()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def sync_tree(src_dir, dst_dir, produced):
+    """Зеркалит src_dir -> dst_dir, копируя только новые/изменённые файлы (по md5)."""
+    src_dir, dst_dir = Path(src_dir), Path(dst_dir)
+    if not src_dir.exists():
+        return
+    for f in sorted(src_dir.rglob("*")):
+        if not f.is_file():
+            continue
+        dst = dst_dir / f.relative_to(src_dir)
+        produced.add(dst.resolve())
+        if dst.exists() and _hash(dst) == _hash(f):
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(f, dst)
 
 
 # ---------- метрики текста (оценка ширины без шрифтов) ----------
@@ -1660,6 +1686,22 @@ IMG_GEN = re.compile(r"!\[(?P<alt>[^\]]*)\]\((?P<path>(?:\./|(?:\.\./)+)?gen/(?P
 COMBINED = re.compile(DIRECTIVE.pattern + "|" + IMG_GEN.pattern + "|" + LEGACY_INC.pattern)
 
 
+MD_IMG = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
+_CODE_SPANS = re.compile(r"```.*?```|`[^`\n]*`", re.S)
+
+
+def check_images(text, where, md_dir, docs_in, docs_out, P):
+    """Все ![](путь) должны указывать на существующие файлы (путь — от папки самого .md)."""
+    for m in MD_IMG.finditer(_CODE_SPANS.sub("", text)):
+        raw = m.group(1).strip()
+        path = raw.split()[0].strip("<>") if raw else ""
+        if not path or path.startswith(("http://", "https://", "#", "data:", "mailto:")):
+            continue
+        path = urllib.parse.unquote(path.split("#")[0].split("?")[0])
+        if path and not ((docs_in / md_dir / path).exists() or (docs_out / md_dir / path).exists()):
+            P.diag.err(where, f"image '{path}': file not found (looked in {docs_in / md_dir})")
+
+
 class Ctx:
     def __init__(self, P, where, docdir, numbered=True):
         self.P, self.where, self.docdir, self.numbered = P, where, docdir, numbered
@@ -1803,8 +1845,12 @@ def build_project(pdir):
     out_docs = OUT / P.name / "docs"
     gen_src = docs_dir / "gen"          # сгенерированное лежит рядом с исходником
     gen_out = out_docs / "gen"
-    produced = set()                    # файлы в out/
-    produced_src = set()                # файлы в src/.../gen/
+    imgs_in, imgs_out = docs_dir / "images", out_docs / "images"
+    produced = set()                    # все файлы, которые должны остаться (и в src/gen, и в out/)
+
+    def emit_pair(rel_name, content):
+        write_if_changed(gen_src / rel_name, content, produced)
+        write_if_changed(gen_out / rel_name, content, produced)
 
     # 1. загрузка
     items = load_specs(P, spec_dir) if spec_dir.exists() else []
@@ -1850,7 +1896,7 @@ def build_project(pdir):
                 P.diag.err(W_(s), "diagram could not be generated")
             if svg:
                 s["_has_svg"] = True
-                write_if_changed(gen_src / f"{nm}.svg", svg, produced_src)
+                emit_pair(f"{nm}.svg", svg)
             if tbl is not None:
                 s["_table_md"] = tbl
     if P.diag.errors:
@@ -1863,20 +1909,15 @@ def build_project(pdir):
         gctx.where = f"gen/{nm}.md"
         title = s_.get("title", nm)
         body = s_["_table_md"] if "_table_md" in s_ else f"![{title}]({nm}.svg)\n"
-        write_if_changed(gen_src / f"{nm}.md", expand(f"**{title}**\n\n{body}", gctx), produced_src)
+        emit_pair(f"{nm}.md", expand(f"**{title}**\n\n{body}", gctx))
     idx = "# Specification index\n\n"
     for kd in KINDS:
         group = [(nm, s_) for nm, s_ in sorted(P.REG.items()) if s_["kind"] == kd]
         if group:
             idx += f"## {kd}\n\n" + "".join(f"- [{s_.get('title', nm)}]({nm}.md) — `{nm}`\n" for nm, s_ in group) + "\n"
-    write_if_changed(gen_src / "index.md", idx, produced_src)
-    if gen_src.exists():
-        for f in list(gen_src.rglob("*")):
-            if f.is_file() and f.resolve() not in produced_src:
-                f.unlink()
-                print(f"  🧹 removed stale src gen/{f.relative_to(gen_src).as_posix()}")
-        for f in sorted(produced_src):
-            smart_copy(f, gen_out / f.relative_to(gen_src.resolve()), produced)
+    emit_pair("index.md", idx)
+    # зеркалим images -> out/docs/images (по md5)
+    sync_tree(imgs_in, imgs_out, produced)
 
     # 4. документы
     if docs_dir.exists():
@@ -1884,21 +1925,25 @@ def build_project(pdir):
             if not f.is_file():
                 continue
             rel = f.relative_to(docs_dir)
-            if rel.parts[0] == "gen":
+            if rel.parts[0] in ("gen", "images"):
                 continue
             if f.suffix.lower() == ".md":
                 ctx = Ctx(P, f"docs/{rel.as_posix()}", rel.parent.as_posix() if str(rel.parent) != "." else "")
-                write_if_changed(out_docs / rel, expand(f.read_text(encoding="utf-8"), ctx), produced)
+                expanded = expand(f.read_text(encoding="utf-8"), ctx)
+                check_images(expanded, ctx.where, rel.parent, docs_dir, out_docs, P)
+                write_if_changed(out_docs / rel, expanded, produced)
             else:
                 smart_copy(f, out_docs / rel, produced)
 
-    # 5. вычистить устаревшее
-    if out_docs.exists():
-        for f in list(out_docs.rglob("*")):
+    # 5. вычистить устаревшее: в src/.../gen и во всём out/.../docs
+    for root, label in ((gen_src, "src gen/"), (out_docs, "")):
+        if not root.exists():
+            continue
+        for f in list(root.rglob("*")):
             if f.is_file() and f.resolve() not in produced:
                 f.unlink()
-                print(f"  🧹 removed stale {f.relative_to(out_docs).as_posix()}")
-        for d in sorted([x for x in out_docs.rglob("*") if x.is_dir()], reverse=True):
+                print(f"  🧹 removed stale {label}{f.relative_to(root).as_posix()}")
+        for d in sorted([x for x in root.rglob("*") if x.is_dir()], reverse=True):
             if not any(d.iterdir()):
                 d.rmdir()
 
@@ -1913,11 +1958,15 @@ def deploy():
         print("❌ No out/ directory. Run build first.")
         return
     dst = ROOT / "docs"
-    if dst.exists():
-        print(f"🧹 Cleaning {dst}...")
-        shutil.rmtree(dst)
-    print(f"📦 Copying {OUT} -> {dst}...")
-    shutil.copytree(OUT, dst)
+    dst.mkdir(parents=True, exist_ok=True)
+    print(f"📦 Syncing {OUT} -> {dst}...")
+    sync_tree(OUT, dst, set())
+    for f in list(dst.rglob("*")):          # убрать то, чего нет в out/
+        if f.is_file() and not (OUT / f.relative_to(dst)).exists():
+            f.unlink()
+    for d in sorted([x for x in dst.rglob("*") if x.is_dir()], reverse=True):
+        if not any(d.iterdir()):
+            d.rmdir()
     print(f"✅ Deployed to {dst}")
 
 
