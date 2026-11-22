@@ -79,6 +79,7 @@ python3 buildex.py new fsm ctl      заготовка YAML (в stdout)
 | `fsm` | конечный автомат | diagram, table |
 | `pins` | выводы: символ-блок + таблица | diagram, table |
 | `const` | именованные константы | table |
+| `connector` | физическая раскладка разъёма: header / dip / sil (**плагин**) | diagram, table |
 
 Пример и список ключей любой сущности: `python3 buildex.py explain <kind>`.
 
@@ -105,6 +106,31 @@ python3 buildex.py new fsm ctl      заготовка YAML (в stdout)
   Вариант может переопределить общее поле по имени или взять готовый bitfield через `ref:`.
 * `regmap`: у регистра `ref: bitfield_name` или inline `fields`.
 
+### Разъёмы (`connector`, плагин)
+
+Геометрия поверх уже описанного `pins`: у выводов нужен `pin: N` (для шины — список `pin: [3,4,5,6]`).
+
+```yaml
+kind: connector
+name: j1
+pins: uart_pins            # единый источник правды: имена, направления, описания
+type: header               # header (1-2 ряда) | dip | sil | edge
+rows: 2
+per_row: 10
+numbering: zigzag          # zigzag | rowwise | ccw (у dip по умолчанию ccw)
+pin1: top-left             # top-left | top-right | bottom-left | bottom-right
+key: {side: bottom, kind: notch}    # notch | tab | semicircle | none
+orientation: vertical      # horizontal | vertical  (или rotate: 0 | 90 | 180 | 270)
+```
+
+Тип `edge` — карточный разъём (например PCIe): `sides: [B, A]`, `per_row: 18`, `gap_after: 11` (прорезь-ключ),
+номера в `pins` вида `pin: B14`; питание и земля с несколькими позициями задаются списком `pin: [B4, B7, ...]`.
+Пример — `demo/src/demo/spec/demo_pcie.yaml`.
+
+Поворот задаётся в спецификации, не в тексте документа. Положение ключа и угол pin 1 описываются в системе
+`rotate: 0`, а поворот по часовой стрелке применяется ко всему корпусу целиком. Позиции без сигнала рисуются
+как NC (с предупреждением). Один `pins` можно показать на нескольких разъёмах.
+
 ## 5. Директивы в Markdown
 
 | Директива | Результат |
@@ -122,6 +148,31 @@ python3 buildex.py new fsm ctl      заготовка YAML (в stdout)
 
 Старые `[include](gen/x-table.md)` и `[include](gen/x.svg)` работают как раньше.
 Нумерация рисунков и таблиц автоматическая, по каждому файлу отдельно.
+
+## Плагины
+
+Новые сущности и директивы добавляются файлами, без правки `buildex.py`:
+
+```
+plugins/*.py                 глобальные (для всех проектов)
+src/<проект>/plugins/*.py    только для этого проекта
+plugins/_template.py         шаблон (файлы на «_» не загружаются)
+```
+
+Плагин — это функция `register(api)`:
+
+```python
+def register(api):
+    api.register_kind("mykind", validate=..., diagram=..., table=..., anchors=..., help=(описание, пример_yaml))
+    api.register_directive("shout", lambda arg, ctx, P: arg.upper())     # {{shout:hi}} -> HI
+```
+
+`api` даёт `Svg`, `svg_doc`, `tw`, `md_table`, `check_keys`, `as_int`, `W_` и т.д. (полный список — в
+`plugins/_template.py`), поэтому плагин ничего не импортирует из `buildex`. Ошибки пишутся `P.diag.err(where, msg)`.
+Сломанный плагин не роняет сборку: он даёт предупреждение, а исключение внутри плагина становится обычной
+ошибкой с именем сущности. Плагин, зависящий от других сущностей (как `connector` от `pins`), ставит `order=1`.
+Загруженные плагины печатаются в начале сборки; `buildex.py kinds` помечает их `[plugin]`; `--watch`
+перезагружает плагины при изменении.
 
 ## 6. Проверки
 

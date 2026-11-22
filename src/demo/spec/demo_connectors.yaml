@@ -1,0 +1,81 @@
+# kind: connector (плагин plugins/connector.py) — физическая раскладка поверх kind: pins.
+# Один и тот же интерфейс можно показать на разных разъёмах и в разных поворотах.
+kind: connector
+name: j1
+title: "J1 — гребёнка 2×10, горизонтально"
+pins: uart_pins
+type: header
+rows: 2
+per_row: 10
+numbering: zigzag            # 1 сверху, 2 под ней, 3 сверху ...
+pin1: top-left
+key: {side: bottom, kind: notch}
+orientation: horizontal
+---
+# тот же разъём, повёрнутый на 90°: меняется только orientation (ключ и pin 1 поворачиваются вместе с корпусом)
+kind: connector
+name: j1_vertical
+title: "J1 — тот же разъём, вертикально"
+pins: uart_pins
+type: header
+rows: 2
+per_row: 10
+key: {side: bottom, kind: notch}
+orientation: vertical
+---
+# pin1 в другом углу и нумерация по рядам (сначала весь верхний ряд, потом нижний)
+kind: connector
+name: j1_rowwise
+title: "Нумерация по рядам, pin 1 справа сверху"
+pins: uart_pins
+type: header
+rows: 2
+per_row: 10
+numbering: rowwise
+pin1: top-right
+key: {side: top, kind: tab}
+---
+kind: pins
+name: ne555
+title: "Выводы таймера 555"
+symbol: "555"
+pins:
+  - {name: GND,   dir: gnd,   pin: 1}
+  - {name: TRIG,  dir: in,    pin: 2, description: "Запуск (запускает при < 1/3 VCC)"}
+  - {name: OUT,   dir: out,   pin: 3}
+  - {name: RESET, dir: in,    pin: 4, active_low: true}
+  - {name: CTRL,  dir: in,    pin: 5, description: "Опорное напряжение"}
+  - {name: THR,   dir: in,    pin: 6, description: "Порог (> 2/3 VCC)"}
+  - {name: DIS,   dir: out,   pin: 7, description: "Разряд"}
+  - {name: VCC,   dir: power, pin: 8}
+---
+# DIP: нумерация против часовой, ключ-полукруг у первого вывода; по умолчанию рисуется вертикально
+kind: connector
+name: u1
+title: "U1 — DIP-8"
+pins: ne555
+type: dip
+---
+kind: connector
+name: u1_horizontal
+title: "U1 — DIP-8, повёрнут горизонтально"
+pins: ne555
+type: dip
+orientation: horizontal
+---
+# однорядный разъём; позиция 3 не назначена -> NC (предупреждение), подписи снизу
+kind: pins
+name: sensor
+title: "Разъём датчика"
+pins:
+  - {name: VCC, dir: power, pin: 1}
+  - {name: SDA, dir: inout, pin: 2, description: "I²C данные"}
+  - {name: GND, dir: gnd,   pin: 4}
+---
+kind: connector
+name: j2
+title: "J2 — однорядная гребёнка"
+pins: sensor
+type: sil
+per_row: 4
+labels: bottom

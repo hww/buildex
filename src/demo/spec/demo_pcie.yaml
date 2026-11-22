@@ -1,0 +1,52 @@
+# PCIe x1: карточный разъём (36 контактов: стороны B и A по 18). Распиновка приведена для иллюстрации —
+# сверяйте с PCI Express CEM Specification перед использованием в проекте.
+# Несколько позиций у одного сигнала (питание, земля) задаются списком: pin: [B4, B7, ...].
+kind: pins
+name: pcie_x1
+title: "PCIe x1 — сигналы"
+symbol: "PCIe x1"
+pins:
+  - {name: "+12V",    dir: power, pin: [B1, B2, A2, A3], group: power, description: "Питание 12 В"}
+  - {name: "+3.3V",   dir: power, pin: [B8, A9, A10],    group: power, description: "Питание 3.3 В"}
+  - {name: "3.3Vaux", dir: power, pin: B10,              group: power, description: "Дежурное питание 3.3 В"}
+  - {name: GND,       dir: gnd,   pin: [B4, B7, B13, B16, B18, A4, A12, A15, A18], group: power}
+  - {name: SMCLK,     dir: in,    pin: B5,  group: sideband, description: "SMBus: такт"}
+  - {name: SMDAT,     dir: inout, pin: B6,  group: sideband, description: "SMBus: данные"}
+  - {name: TRST_N,    dir: in,    pin: B9,  group: jtag, active_low: true}
+  - {name: WAKE_N,    dir: out,   pin: B11, group: sideband, active_low: true, description: "Пробуждение"}
+  - {name: PRSNT1_N,  dir: in,    pin: A1,  group: sideband, active_low: true, description: "Присутствие карты"}
+  - {name: PRSNT2_N,  dir: in,    pin: B17, group: sideband, active_low: true, description: "Присутствие карты (x1)"}
+  - {name: TCK,       dir: in,    pin: A5,  group: jtag}
+  - {name: TDI,       dir: in,    pin: A6,  group: jtag}
+  - {name: TDO,       dir: out,   pin: A7,  group: jtag}
+  - {name: TMS,       dir: in,    pin: A8,  group: jtag}
+  - {name: PERST_N,   dir: in,    pin: A11, group: sideband, active_low: true, description: "Сброс"}
+  - {name: REFCLK_P,  dir: in,    pin: A13, group: lane, description: "Опорная частота 100 МГц, +"}
+  - {name: REFCLK_N,  dir: in,    pin: A14, group: lane, description: "Опорная частота 100 МГц, −"}
+  - {name: PETp0,     dir: out,   pin: B14, group: lane, description: "Линия 0: передача (+)"}
+  - {name: PETn0,     dir: out,   pin: B15, group: lane, description: "Линия 0: передача (−)"}
+  - {name: PERp0,     dir: in,    pin: A16, group: lane, description: "Линия 0: приём (+)"}
+  - {name: PERn0,     dir: in,    pin: A17, group: lane, description: "Линия 0: приём (−)"}
+  - {name: RSVD,      dir: nc,    pin: [B3, B12], group: reserved, description: "Зарезервировано"}
+---
+# type: edge — два ряда контактов (сторона B сверху, A снизу), позиции вида B14/A3,
+# gap_after: 11 — прорезь-ключ между позициями 11 и 12
+kind: connector
+name: pcie_edge
+title: "PCIe x1 — край карты"
+pins: pcie_x1
+type: edge
+sides: [B, A]            # верхний ряд — B, нижний — A
+per_row: 18
+gap_after: 11
+orientation: horizontal
+---
+# тот же разъём вертикально (как слот на материнской плате у края)
+kind: connector
+name: pcie_edge_vertical
+title: "PCIe x1 — вертикально"
+pins: pcie_x1
+type: edge
+per_row: 18
+gap_after: 11
+orientation: vertical

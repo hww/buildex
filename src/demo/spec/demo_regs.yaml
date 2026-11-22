@@ -62,17 +62,20 @@ regions:
   - {name: TIMER,   start: 0xF010, end: 0xF01F,  access: rw, group: io}
   - {name: VECTORS, start: 0xFFF0, end: 0xFFFF,  access: ro, purpose: "Векторы прерываний"}
 ---
-# pins: направления, шины, active_low, номера выводов, группы
+# pins: направления, шины, active_low, номера выводов (для шины — список номеров), группы.
+# Номера используются и таблицей, и разъёмом (kind: connector).
 kind: pins
 name: uart_pins
 title: "Выводы UART-блока"
 symbol: UART
 pins:
-  - {name: CLK,   dir: in,    pin: 1, group: system}
-  - {name: RST_N, dir: in,    pin: 2, group: system, active_low: true, description: "Сброс"}
-  - {name: A,     dir: in,    pin: 3, width: 4, group: bus, description: "Адрес регистра"}
-  - {name: D,     dir: inout, pin: 4, width: 8, group: bus, description: "Шина данных"}
-  - {name: WE,    dir: in,    pin: 5, group: bus, description: "Запись"}
-  - {name: TX,    dir: out,   pin: 6, group: line}
-  - {name: RX,    dir: in,    pin: 7, group: line}
-  - {name: IRQ,   dir: out,   pin: 8, description: "Прерывание"}
+  - {name: CLK,   dir: in,    pin: 1,  group: system}
+  - {name: RST_N, dir: in,    pin: 2,  group: system, active_low: true, description: "Сброс"}
+  - {name: A,     dir: in,    pin: [3, 4, 5, 6],                group: bus, width: 4, description: "Адрес регистра"}
+  - {name: D,     dir: inout, pin: [7, 8, 9, 10, 11, 12, 13, 14], group: bus, width: 8, description: "Шина данных"}
+  - {name: WE,    dir: in,    pin: 15, group: bus, description: "Запись"}
+  - {name: TX,    dir: out,   pin: 16, group: line}
+  - {name: RX,    dir: in,    pin: 17, group: line}
+  - {name: IRQ,   dir: out,   pin: 18, description: "Прерывание"}
+  - {name: VCC,   dir: power, pin: 19, group: power}
+  - {name: GND,   dir: gnd,   pin: 20, group: power}
