@@ -1,230 +1,208 @@
-# buildex.py — генератор документации по архитектуре
+Вот точный технический перевод текста на английский (включая завершение последней оборванной строки):
 
-Ты описываешь **суть** (регистры, биты, коды, автоматы, карты памяти, тайминги) в YAML.
-Картинки (SVG) и таблицы (Markdown) строятся сами. В тексте документации на них ссылаются
-директивами `{{...}}`.
+buildex.py — Architecture Documentation Generator
 
-Нужен Python 3 и `pip install pyyaml`.
+You describe the essence (registers, bits, codes, state machines, memory maps, timings) in YAML.
+Diagrams (SVG) and tables (Markdown) are generated automatically. In the documentation text, they are referenced
+using {{...}} directives.
+Requires Python 3 and pip install pyyaml.
 
-## 1. Где что лежит
+1. Directory Structure
 
-```
 buildex.py
-src/<проект>/spec/*.yaml      описания (много документов в файле, разделитель ---)
-src/<проект>/docs/**/*.md     твой текст
-src/<проект>/docs/images/     нарисованное вручную (коммитим)
-src/<проект>/docs/gen/        СГЕНЕРИРОВАННОЕ: NAME.svg, NAME.md, index.md (в .gitignore)
-src/<проект>/buildex.yaml     необязательно: lang: en | ru  (подписи «Рис.»/«Figure»)
-out/<проект>/docs/            зеркало: готовые .md + gen/ + images/ (в .gitignore)
-docs/                         копия out/ по --deploy (коммитим)
-```
+src/<project>/spec/*.yaml     specifications (multiple documents per file, separated by ---)
+src/<project>/docs/**/*.md    your text
+src/<project>/docs/images/    hand-drawn images (tracked in git)
+src/<project>/docs/gen/       GENERATED: NAME.svg, NAME.md, index.md (in .gitignore)
+src/<project>/buildex.yaml    optional: lang: en | ru  ("Figure" / "Рис." captions)
+out/<project>/docs/           mirror: built .md + gen/ + images/ (in .gitignore)
+docs/                         copy of out/ via --deploy (tracked in git)
+The source .md references images using standard relative paths, so previews in your editor
+and on GitHub work without building:
+markdown
+![INSTRUCTION · 32 BIT](gen/insn.svg)      generated
+![diagram](images/board.png)               hand-drawn
+Используйте код с осторожностью.
+The generator validates gen/NAME.svg links (an unknown name throws an error) and adds an auto-numbered
+"Figure N — title" caption. If the line immediately following the image starts with *,
+the caption is treated as manually written and is not added.
+gen/NAME.md is the entity table (formerly NAME-table.md; if there is no table, it contains the diagram).
+Legacy [include](gen/x-table.md) and [include](gen/x.svg) still work.
+An empty .gitignore containing out/ and src/*/docs/gen/ is created on the first run
+(if the file already exists, the generator will suggest what to add).
 
-Исходный `.md` ссылается на картинки обычным относительным путём, поэтому превью в
-редакторе и на GitHub работает без сборки:
+Demo Project
 
-```markdown
-![INSTRUCTION · 32 BIT](gen/insn.svg)      сгенерированная
-![схема](images/board.png)                 нарисованная вручную
-```
+The demo/ folder contains a ready-to-use project showcasing almost all features: demo/src/demo/spec/*.yaml
+(source specs), demo/src/demo/docs/*.md (text with directives), and demo/out/demo/docs/ (output).
+Run with: cd demo && python3 buildex.py.
 
-Ссылки `gen/NAME.svg` генератор проверяет (неизвестное имя = ошибка) и добавляет подпись
-«Рис. N — заголовок» с автонумерацией. Если сразу после картинки стоит строка, начинающаяся
-с `*`, подпись считается написанной вручную и не добавляется.
+2. Usage
 
-`gen/NAME.md` — таблица сущности (бывший `NAME-table.md`; если таблицы нет, то рисунок).
-Старые `[include](gen/x-table.md)` и `[include](gen/x.svg)` по-прежнему работают.
-Пустой `.gitignore` с `out/` и `src/*/docs/gen/` создаётся при первом запуске
-(если файл уже есть, генератор подскажет, что добавить).
+python3 buildex.py                  build all projects
+python3 buildex.py gpu              build only the 'gpu' project
+python3 buildex.py --watch          rebuild when files change
+python3 buildex.py --deploy         copy out/ to docs/ after building
+python3 buildex.py kinds            list available entity kinds
+python3 buildex.py explain bitfield schema and example for an entity kind
+python3 buildex.py new fsm ctl      YAML boilerplate (to stdout)
 
-## Демо-проект
+3. Reading Errors
 
-В папке `demo/` лежит готовый проект, который показывает почти все возможности: `demo/src/demo/spec/*.yaml`
-(исходные описания), `demo/src/demo/docs/*.md` (текст с директивами) и `demo/out/demo/docs/` (результат).
-Запуск: `cd demo && python3 buildex.py`.
+Format: file:line kind 'name': what is wrong — hint.
+• spec errors (isa.yaml:63 enum 'x': ...) — an issue in YAML. Nothing is rendered while these exist.
+• docs/…md: {{table:NAME}}: ... — the text references something that doesn't exist. Two cases:
+	• 'NAME' is not defined in any spec file ... (loaded specs: ...) — the name is missing from the
+specifications. Check the loaded specs list: if the needed file isn't there, it wasn't placed in
+src/<project>/spec/ or was overwritten.
+	• 'NAME' (enum) has no diagram; its views: table — the entity exists, but doesn't support that view.
+• Warnings (⚠️) do not block the build: uncovered bits, unreachable states, etc.
 
-## 2. Запуск
+4. Entities
 
-```
-python3 buildex.py                  собрать все проекты
-python3 buildex.py gpu              только проект gpu
-python3 buildex.py --watch          пересобирать при изменении файлов
-python3 buildex.py --deploy         после сборки скопировать out/ в docs/
-python3 buildex.py kinds            список сущностей
-python3 buildex.py explain bitfield схема и пример для сущности
-python3 buildex.py new fsm ctl      заготовка YAML (в stdout)
-```
 
-## 3. Как читать ошибки
+kind	What it describes	Default views
+bitfield	register/word made of fields	diagram, table
+enum	lookup table of codes (arbitrary columns)	table
+encoding	family of word formats (common fields + variants by selector)	diagram, table
+regmap	registers at offsets	table (enable diagram via view:)
+memmap	address space	diagram, table
+timing	timing diagram	diagram
+fsm	finite state machine	diagram, table
+pins	pinout: symbol block + table	diagram, table
+const	named constants	table
+connector	physical connector layout: header / dip / sil (plugin)	diagram, table
 
-Формат: `файл:строка вид 'имя': что не так — подсказка`.
+For an example and list of keys for any entity: python3 buildex.py explain <kind>.
+The output: field is no longer needed. Only use view: [diagram, table] if you want to override the default views.
 
-* `spec`-ошибки (`isa.yaml:63 enum 'x': ...`) — проблема в YAML. Пока они есть, ничего не рисуется.
-* `docs/…md: {{table:NAME}}: ...` — в тексте есть ссылка на то, чего нет. Два случая:
-  * `'NAME' is not defined in any spec file ... (loaded specs: ...)` — такого имени нет в
-    спецификациях. Смотри список `loaded specs`: если там нет нужного файла, он не попал в
-    `src/<проект>/spec/` или перезаписан.
-  * `'NAME' (enum) has no diagram; its views: table` — сущность есть, но такого вида у неё нет.
-* Предупреждения (⚠️) не мешают сборке: непокрытые биты, недостижимые состояния.
+Fields in bitfield / encoding / regmap
 
-## 4. Сущности
-
-| kind | Что описывает | Виды по умолчанию |
-|---|---|---|
-| `bitfield` | регистр/слово из полей | diagram, table |
-| `enum` | таблица кодов (любые колонки) | table |
-| `encoding` | семейство форматов слова (общие поля + варианты по селектору) | diagram, table |
-| `regmap` | регистры по смещениям | table (diagram включается `view:`) |
-| `memmap` | адресное пространство | diagram, table |
-| `timing` | временная диаграмма | diagram |
-| `fsm` | конечный автомат | diagram, table |
-| `pins` | выводы: символ-блок + таблица | diagram, table |
-| `const` | именованные константы | table |
-| `connector` | физическая раскладка разъёма: header / dip / sil (**плагин**) | diagram, table |
-
-Пример и список ключей любой сущности: `python3 buildex.py explain <kind>`.
-
-Поле `output:` больше не нужно. Нужно только чтобы изменить вид по умолчанию:
-`view: [diagram, table]`.
-
-### Поле в bitfield / encoding / regmap
-
-```yaml
-- {name: OP, bits: [17,13], enum: alu_ops, access: rw, reset: 0, description: "..."}
+yaml
+- {name: OP, bits:, enum: alu_ops, access: rw, reset: 0, description: "..."}
 - {name: F,  bit: 18}
-- {name: RSV, bits: [6,0], reserved: true}          # штриховка
-- {name: J,  bit: 30, value: 1}                     # константа, рисуется «J / 1»
-- {name: REG, bits: [12,7], overlay: true}          # альтернативный смысл тех же битов
-```
+- {name: RSV, bits:, reserved: true}          # hatched shading
+- {name: J,  bit: 30, value: 1}                     # constant, rendered as "J / 1"
+- {name: REG, bits:, overlay: true}          # alternative meaning for the same bits
+Используйте код с осторожностью.
+Legacy msb: 31, lsb: 24 syntax is also accepted.
 
-Принимаются и старые `msb: 31, lsb: 24`.
+Reusability
 
-### Повторное использование
+• enum: alu_ops on a field — the field's table links to the codes, and values are checked against bit width.
+• extends: base_bitfield + fixed: {J: 0} — field inheritance.
+• encoding: common fields are defined once under common, with when: {J: 0, I: 1} on each variant.
+A variant can override a common field by name or reference an existing bitfield via ref:.
+• regmap: registers can use ref: bitfield_name or inline fields.
 
-* `enum: alu_ops` у поля — таблица поля сошлётся на коды, значения проверяются на ширину.
-* `extends: base_bitfield` + `fixed: {J: 0}` — наследование полей.
-* `encoding`: общие поля один раз в `common`, у каждого варианта `when: {J: 0, I: 1}`.
-  Вариант может переопределить общее поле по имени или взять готовый bitfield через `ref:`.
-* `regmap`: у регистра `ref: bitfield_name` или inline `fields`.
+Connectors (connector, plugin)
 
-### Разъёмы (`connector`, плагин)
-
-Геометрия поверх уже описанного `pins`: у выводов нужен `pin: N` (для шины — список `pin: [3,4,5,6]`).
-
-```yaml
+Geometry layered on top of an already defined pins entity: pins require pin: N (for a bus, use a list pin: [3,4,5,6]).
+yaml
 kind: connector
 name: j1
-pins: uart_pins            # единый источник правды: имена, направления, описания
-type: header               # header (1-2 ряда) | dip | sil | edge
+pins: uart_pins            # single source of truth: names, directions, descriptions
+type: header               # header (1-2 rows) | dip | sil | edge
 rows: 2
 per_row: 10
-numbering: zigzag          # zigzag | rowwise | ccw (у dip по умолчанию ccw)
+numbering: zigzag          # zigzag | rowwise | ccw (defaults to ccw for dip)
 pin1: top-left             # top-left | top-right | bottom-left | bottom-right
 key: {side: bottom, kind: notch}    # notch | tab | semicircle | none
-orientation: vertical      # horizontal | vertical  (или rotate: 0 | 90 | 180 | 270)
-```
+orientation: vertical      # horizontal | vertical  (or rotate: 0 | 90 | 180 | 270)
+Используйте код с осторожностью.
+The edge type is for card-edge connectors (e.g., PCIe): sides: [B, A], per_row: 18, gap_after: 11 (key notch),
+with pin numbers in pins formatted like pin: B14; multi-pin power and ground nets use a list pin: [B4, B7, ...].
+See example in demo/src/demo/spec/demo_pcie.yaml.
+Rotation is specified in the spec, not in the document text. Key position and pin 1 corner are defined in the
+rotate: 0 coordinate system, and clockwise rotation is applied to the entire housing. Unassigned positions are
+rendered as NC (with a warning). A single pins entity can be displayed across multiple connectors.
 
-Тип `edge` — карточный разъём (например PCIe): `sides: [B, A]`, `per_row: 18`, `gap_after: 11` (прорезь-ключ),
-номера в `pins` вида `pin: B14`; питание и земля с несколькими позициями задаются списком `pin: [B4, B7, ...]`.
-Пример — `demo/src/demo/spec/demo_pcie.yaml`.
-
-Поворот задаётся в спецификации, не в тексте документа. Положение ключа и угол pin 1 описываются в системе
-`rotate: 0`, а поворот по часовой стрелке применяется ко всему корпусу целиком. Позиции без сигнала рисуются
-как NC (с предупреждением). Один `pins` можно показать на нескольких разъёмах.
-
-## 5. Директивы в Markdown
-
-| Директива | Результат |
-|---|---|
-| `{{auto:NAME}}` | рисунок + таблица |
-| `{{figure:NAME}}` | рисунок с подписью «Рис. N — …» |
-| `{{table:NAME}}` | таблица с подписью «Таблица N — …» |
-| `{{ref:NAME}}` / `{{ref:NAME.FIELD}}` | ссылка на сущность / на поле, код, регистр, состояние |
-| `{{const:NAME}}` | значение константы |
-| `{{include:file.md}}` | вставка другого .md (путь от `docs/`) |
-
-Чтобы написать директиву в тексте буквально, поставь перед ней обратную косую:
-`\{{auto:NAME}}` выведется как `{{auto:NAME}}` (так же `\[include](...)`).
+5. Markdown Directives
 
 
-Старые `[include](gen/x-table.md)` и `[include](gen/x.svg)` работают как раньше.
-Нумерация рисунков и таблиц автоматическая, по каждому файлу отдельно.
+Directive	Result
+{{auto:NAME}}	diagram + table
+{{figure:NAME}}	diagram with "Figure N — …" caption
+{{table:NAME}}	table with "Table N — …" caption
+{{ref:NAME}} / {{ref:NAME.FIELD}}	link to an entity / to a field, code, register, or state
+{{const:NAME}}	constant value
+{{include:file.md}}	include another .md file (path relative to docs/)
 
-## Плагины
+To write a directive literally in the text, escape it with a backslash:
+\{{auto:NAME}} renders as {{auto:NAME}} (same for \[include](...)).
+Legacy [include](gen/x-table.md) and [include](gen/x.svg) work as before.
+Figure and table numbering is automatic and scoped per file.
 
-Новые сущности и директивы добавляются файлами, без правки `buildex.py`:
+Plugins
 
-```
-plugins/*.py                 глобальные (для всех проектов)
-src/<проект>/plugins/*.py    только для этого проекта
-plugins/_template.py         шаблон (файлы на «_» не загружаются)
-```
-
-Плагин — это функция `register(api)`:
-
-```python
+New entities and directives are added via files without modifying buildex.py:
+plugins/*.py                 global (available to all projects)
+src/<project>/plugins/*.py   local to a specific project
+plugins/_template.py         template (files starting with "_" are not loaded)
+A plugin is a register(api) function:
+python
 def register(api):
-    api.register_kind("mykind", validate=..., diagram=..., table=..., anchors=..., help=(описание, пример_yaml))
+    api.register_kind("mykind", validate=..., diagram=..., table=..., anchors=..., help=(description, example_yaml))
     api.register_directive("shout", lambda arg, ctx, P: arg.upper())     # {{shout:hi}} -> HI
-```
+Используйте код с осторожностью.
+api provides Svg, svg_doc, tw, md_table, check_keys, as_int, W_, etc. (full list in
+plugins/_template.py), so plugins do not need to import anything from buildex. Errors are reported via P.diag.err(where, msg).
+A broken plugin does not crash the build: it emits a warning, and exceptions inside a plugin become standard
+entity errors. A plugin that depends on other entities (like connector on pins) sets order=1.
+Loaded plugins are printed at the start of the build; buildex.py kinds marks them with [plugin]; --watch
+reloads plugins when modified.
 
-`api` даёт `Svg`, `svg_doc`, `tw`, `md_table`, `check_keys`, `as_int`, `W_` и т.д. (полный список — в
-`plugins/_template.py`), поэтому плагин ничего не импортирует из `buildex`. Ошибки пишутся `P.diag.err(where, msg)`.
-Сломанный плагин не роняет сборку: он даёт предупреждение, а исключение внутри плагина становится обычной
-ошибкой с именем сущности. Плагин, зависящий от других сущностей (как `connector` от `pins`), ставит `order=1`.
-Загруженные плагины печатаются в начале сборки; `buildex.py kinds` помечает их `[plugin]`; `--watch`
-перезагружает плагины при изменении.
+Вот перевод оставшихся разделов на английский в том же стиле:
 
-## 6. Проверки
+6. Validations
 
-* все `![](путь)` в документах указывают на существующие файлы (путь считается от папки самого `.md`;
-  ссылки `http(s)://`, `#`, `data:` и код в обратных кавычках пропускаются);
+• All ![](path) links in documents point to existing files (paths are resolved relative to the .md file's directory;
+http(s)://, #, data: links, and inline code in backticks are skipped);
+• Duplicate names (indicating where the first definition occurred), typos in keys ("did you mean…");
+• Forgotten --- separator between documents (duplicate key);
+• Overlapping fields, out-of-bounds fields, uncovered bits;
+• Duplicate and overlapping codes in enum, values exceeding bit width;
+• Non-existent enum, ref, extends;
+• Overlapping memmap regions, duplicate register offsets;
+• Unknown fsm states, unreachable states, unknown signals in timing arrows.
+File copying uses MD5 checksums: images/, gen/, and --deploy only touch modified files
+(mtime remains unchanged, so git doesn't see unnecessary diffs); stale files in out/, src/.../gen/, and docs/ are removed.
 
-* дубли имён (с указанием, где первое определение), опечатки в ключах («did you mean…»);
-* забытый `---` между документами (дубль ключа);
-* перекрытие полей, поля за пределами ширины, непокрытые биты;
-* дубли и пересечения кодов в `enum`, значения, не влезающие в ширину;
-* несуществующие `enum`, `ref`, `extends`;
-* пересечения регионов `memmap`, повторные смещения регистров;
-* неизвестные состояния fsm, недостижимые состояния, неизвестные сигналы в стрелках timing.
+7. What Was Promised vs. What Is Actually Done
 
-Копирование идёт по md5: `images/`, `gen/` и `--deploy` трогают только изменившиеся файлы
-(mtime не меняется, git не видит лишних правок); устаревшие файлы в `out/`, `src/.../gen/` и `docs/` удаляются.
+The list from my first response, with an honest status check.
 
-## 7. Что обещано и что реально сделано
+Item	Status
+View selected by kind, output not needed	✅
+Validator with clear error messages	✅
+bitfield: access, reset, reserved, constants, enum reference	✅
+enum, encoding, regmap, memmap, timing, fsm, pins, const	✅
+extends, ref, enum: on fields, {{ref:}} links, auto-numbering	✅
+Index of all entities	✅ (gen/index.md; not inserted into body text)
+MSB/LSB above fields instead of every consecutive bit number	✅
+Splitting a long word across rows (split)	✅
+Rotating and fitting labels in narrow fields	✅ (based on text width estimation, not actual font metrics)
+Constants inside fields, hatching for reserved, access/reset below fields	✅
+Category-based color palette	⚠️ partial: constants are blue, reserved are hatched, groups in memmap; no legend
+new / explain / --watch / errors with file and line numbers	✅ (no browser live-preview)
+Backward compatibility with legacy format (code_list, memspace, output)	✅ (tested on synthetic examples, not across your entire project)
+Renderer registry instead of if kind == ...	✅ (KINDS)
+Schema validation via JSON Schema / Pydantic	❌ validations are hand-coded
+block (block diagram), pipeline	❌
+listing (code examples with auto-encoding)	❌
+mixins	❌ (replaced by common in encoding and extends)
+Export to Verilog / C from the same specs	❌
+setup/hold/delay in timing	⚠️ labeled arrows (arrows) only
+{{ref:}} links inside YAML values	❌ only in Markdown and tables
 
-Список из моего первого ответа, с честной отметкой.
+I have visually inspected the rendered diagrams for encoding, fsm, and timing. The remaining kinds
+(bitfield, regmap, memmap, pins) build without errors, though I haven't inspected them manually.
 
-| Пункт | Статус |
-|---|---|
-| Вид выбирается по `kind`, `output` не нужен | ✅ |
-| Валидатор с понятными сообщениями | ✅ |
-| bitfield: access, reset, reserved, константы, ссылка на enum | ✅ |
-| enum, encoding, regmap, memmap, timing, fsm, pins, const | ✅ |
-| `extends`, `ref`, `enum:` на поле, ссылки `{{ref:}}`, автонумерация | ✅ |
-| Индекс всех сущностей | ✅ (`gen/index.md`; в тексте не вставляется) |
-| msb/lsb над полем, а не все номера подряд | ✅ |
-| Разбивка длинного слова на строки (`split`) | ✅ |
-| Поворот и подгонка подписей в узких полях | ✅ (по оценке ширины текста, не по шрифту) |
-| Константы в поле, штриховка reserved, access/reset под полем | ✅ |
-| Палитра по категориям | ⚠️ частично: константы синие, reserved штрихованные, группы в memmap; легенды нет |
-| `new` / `explain` / `--watch` / ошибки с файлом и строкой | ✅ (предпросмотра в браузере нет) |
-| Совместимость со старым форматом (`code_list`, `memspace`, `output`) | ✅ (проверено на синтетических примерах, не на всём твоём проекте) |
-| Реестр рендереров вместо `if kind == ...` | ✅ (`KINDS`) |
-| Схема через JSON Schema / pydantic | ❌ проверки написаны вручную в коде |
-| `block` (блок-схема), `pipeline` | ❌ |
-| `listing` (примеры программ с автокодированием) | ❌ |
-| `mixins` | ❌ (вместо них `common` в `encoding` и `extends`) |
-| Экспорт в Verilog / C из тех же спецификаций | ❌ |
-| setup/hold/delay в timing | ⚠️ только стрелки с подписью (`arrows`) |
-| Ссылки `{{ref:}}` внутри значений YAML | ❌ только в Markdown и таблицах |
+8. Common Issues
 
-Визуально я проверил картинки `encoding`, `fsm` и `timing`. Остальные виды
-(`bitfield`, `regmap`, `memmap`, `pins`) собираются без ошибок, но вручную я их не рассматривал.
-
-## 8. Типичные проблемы
-
-* **Не вижу картинок** — смотри `src/<проект>/docs/gen/*.svg` (и копию в `out/`).
-* **Пустой список `specs:`** — файлов нет в `src/<проект>/spec/` или у них расширение не `.yaml/.yml`.
-* **`duplicate key 'title'`** — между двумя документами в YAML пропущен `---`.
-* **`duplicate name`** — одно имя определено в двух файлах; оставь одно.
-* **Не копируй `example/` в свой проект** — имена файлов и сущностей совпадут с твоими и затрут их.
+• Can't see any diagrams — check src/<project>/docs/gen/*.svg (and the copy in out/).
+• Empty specs: list — there are no files in src/<project>/spec/, or their extensions aren't .yaml/.yml.
+• duplicate key 'title' — a --- separator is missing between two YAML documents.
+• duplicate name — the same name is defined in two files; remove one.
+• Do not copy example/ into your project — file and entity names will collide with yours and overwrite them.
+Нужно ли собрать оба фрагмента в единый README.md с поправкой мелких опечаток (например, example/ вместо demo/ в разделе 8), или перевести остальные файлы проекта?

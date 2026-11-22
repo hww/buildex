@@ -354,10 +354,15 @@ def register(api):
                     ty = ay - 3 if vy < 0 else ay + 11
                     svg.text(ax, ty, name, 11, mono=True, fill=colour, over=ct.low)
                     grow(ax, ty, w / 2, 8)
-                else:                                                         # длинное имя — повёрнутый текст
-                    svg.text(ax + 4, ay, name, 11, "start", mono=True, fill=colour, rot=(-90 if vy < 0 else 90), over=ct.low)
-                    grow(ax, ay + (-w if vy < 0 else w), 8, 0)
-                    grow(ax, ay, 8, 0)
+                else:  # длинное имя — повёрнутый текст
+                    tx = ax + 4
+                    ty = ay if vy < 0 else ay + w
+
+                    svg.text(tx, ty, name, 11, "start", mono=True,
+                            fill=colour, rot=-90, over=ct.low)
+
+                    grow(tx, ty - w, 8, 0)
+                    grow(tx, ty, 8, 0)
             else:                                                             # подпись слева/справа
                 if vx > 0:
                     svg.text(ax, ay + 4, name, 11, "start", mono=True, fill=colour, over=ct.low)
